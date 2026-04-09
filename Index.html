@@ -1,0 +1,641 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Code Scanner</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #050a0f;
+      --panel: #0a1520;
+      --border: #0ff3;
+      --accent: #00f0ff;
+      --accent2: #ff3cac;
+      --text: #c8e6f0;
+      --glow: 0 0 18px #00f0ff88, 0 0 40px #00f0ff33;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Rajdhani', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,240,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,240,255,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      animation: gridMove 20s linear infinite;
+      pointer-events: none;
+      z-index: 0;
+    }
+    @keyframes gridMove {
+      0% { background-position: 0 0; }
+      100% { background-position: 40px 40px; }
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(0,240,255,0.07) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .container {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+      padding: 40px 20px;
+    }
+    .title {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(1.4rem, 5vw, 2.4rem);
+      font-weight: 900;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      text-shadow: var(--glow);
+      text-align: center;
+    }
+    .subtitle {
+      font-size: 1rem;
+      color: #5a8fa0;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-top: -20px;
+      text-align: center;
+    }
+    .scanner-wrap {
+      position: relative;
+      width: min(340px, 90vw);
+      height: min(340px, 90vw);
+    }
+    .scanner-box {
+      width: 100%;
+      height: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      position: relative;
+      border: 1px solid var(--border);
+    }
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+    #snapshot {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+    .camera-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .camera-placeholder svg {
+      width: 80px;
+      height: 80px;
+      opacity: 0.25;
+      color: var(--accent);
+    }
+    .camera-placeholder p {
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #1e5060;
+    }
+    .corner {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      border-color: var(--accent);
+      border-style: solid;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .corner.tl { top: 10px; left: 10px; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+    .corner.tr { top: 10px; right: 10px; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+    .corner.bl { bottom: 10px; left: 10px; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+    .corner.br { bottom: 10px; right: 10px; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+    .scan-line {
+      position: absolute;
+      left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), var(--accent2), var(--accent), transparent);
+      box-shadow: 0 0 12px var(--accent);
+      opacity: 0;
+      z-index: 3;
+      pointer-events: none;
+    }
+    .scanning .scan-line {
+      opacity: 1;
+      animation: scanMove 2s ease-in-out infinite;
+    }
+    @keyframes scanMove {
+      0%   { top: 10%; }
+      50%  { top: 85%; }
+      100% { top: 10%; }
+    }
+    .processing-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(5,10,15,0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .processing-overlay.show { display: flex; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 3px solid rgba(0,240,255,0.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .processing-overlay p {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      color: var(--accent);
+    }
+    .status {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.18em;
+      color: #1e5060;
+      text-transform: uppercase;
+      transition: color 0.3s;
+      text-align: center;
+      min-height: 1.2em;
+    }
+    .status.active    { color: var(--accent);  text-shadow: 0 0 10px var(--accent); }
+    .status.processing{ color: #ffaa00;         text-shadow: 0 0 10px #ffaa00; }
+    .status.detected  { color: #39ff14;         text-shadow: 0 0 10px #39ff14; }
+    .status.error     { color: var(--accent2);  text-shadow: 0 0 10px var(--accent2); }
+    .btn-row {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      position: relative;
+      padding: 15px 42px;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.22s;
+      overflow: hidden;
+    }
+    .btn-primary {
+      background: transparent;
+      border: 2px solid var(--accent);
+      color: var(--accent);
+    }
+    .btn-primary::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--accent);
+      opacity: 0;
+      transition: opacity 0.22s;
+    }
+    .btn-primary:hover::before { opacity: 0.1; }
+    .btn-primary:hover { box-shadow: var(--glow); }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-primary span { position: relative; z-index: 1; }
+    .btn-capture {
+      background: var(--accent);
+      border: none;
+      color: #050a0f;
+      font-weight: 900;
+      box-shadow: var(--glow);
+      display: none;
+    }
+    .btn-capture:hover { transform: scale(1.04); box-shadow: 0 0 28px #00f0ffaa; }
+    .btn-capture:active { transform: scale(0.97); }
+    .btn-retry {
+      background: transparent;
+      border: 2px solid var(--accent2);
+      color: var(--accent2);
+      display: none;
+    }
+    .btn-retry:hover { box-shadow: 0 0 16px rgba(255,60,172,0.45); }
+    .btn-retry:active { transform: scale(0.97); }
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.88);
+      backdrop-filter: blur(7px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s;
+    }
+    .modal-overlay.show {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .modal {
+      background: var(--panel);
+      border: 1px solid var(--accent);
+      border-radius: 16px;
+      padding: 38px 34px;
+      max-width: 380px;
+      width: 90vw;
+      box-shadow: var(--glow), 0 0 80px rgba(0,240,255,0.1);
+      transform: scale(0.88) translateY(24px);
+      transition: transform 0.38s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .modal-overlay.show .modal {
+      transform: scale(1) translateY(0);
+    }
+    .modal-badge {
+      display: inline-block;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      color: var(--bg);
+      background: var(--accent);
+      padding: 4px 14px;
+      border-radius: 20px;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+    }
+    .modal-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 20px;
+      line-height: 1.35;
+    }
+    .modal-instructions {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 13px;
+    }
+    .modal-instructions li {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 1.05rem;
+      line-height: 1.5;
+      color: var(--text);
+    }
+    .modal-instructions li::before {
+      content: '▸';
+      color: var(--accent);
+      font-size: 1.1rem;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .modal-close {
+      margin-top: 28px;
+      width: 100%;
+      padding: 13px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #5a8fa0;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 0.9rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.22s;
+    }
+    .modal-close:hover {
+      border-color: var(--accent2);
+      color: var(--accent2);
+      box-shadow: 0 0 12px rgba(255,60,172,0.3);
+    }
+    @keyframes pulseRing {
+      0%   { transform: scale(0.92); opacity: 0.9; }
+      100% { transform: scale(1.18); opacity: 0; }
+    }
+    .pulse-ring {
+      position: absolute;
+      inset: -4px;
+      border-radius: 14px;
+      border: 2px solid var(--accent);
+      animation: pulseRing 0.65s ease-out forwards;
+      pointer-events: none;
+      z-index: 4;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div>
+    <div class="title">Code Scanner</div>
+    <div class="subtitle">Point camera at your code</div>
+  </div>
+
+  <div class="scanner-wrap" id="scannerWrap">
+    <div class="scanner-box" id="scannerBox">
+
+      <!-- Default state: no camera -->
+      <div class="camera-placeholder" id="placeholder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        <p>Camera inactive</p>
+      </div>
+
+      <!-- Live camera feed -->
+      <video id="video" autoplay playsinline muted></video>
+
+      <!-- Frozen snapshot after capture -->
+      <img id="snapshot" alt="captured frame"/>
+
+      <!-- Animated scan line (visible while live) -->
+      <div class="scan-line"></div>
+
+      <!-- Processing spinner (visible while OCR runs) -->
+      <div class="processing-overlay" id="processingOverlay">
+        <div class="spinner"></div>
+        <p>READING CODE…</p>
+      </div>
+
+    </div>
+    <!-- Corner decorations -->
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+  </div>
+
+  <div class="status" id="status">AWAITING ACTIVATION</div>
+
+  <div class="btn-row">
+    <button class="btn btn-primary" id="btnStart" onclick="startScanner()">
+      <span>▶ Start Scanning</span>
+    </button>
+    <button class="btn btn-capture" id="btnCapture" onclick="captureAndScan()">
+      📷 &nbsp;Done
+    </button>
+    <button class="btn btn-retry" id="btnRetry" onclick="resetScanner()">
+      ↺ &nbsp;Retry
+    </button>
+  </div>
+</div>
+
+<!-- Result modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-badge" id="modalBadge">CODE</div>
+    <div class="modal-title" id="modalTitle"></div>
+    <ul class="modal-instructions" id="modalInstructions"></ul>
+    <button class="modal-close" onclick="closeModal()">✕ &nbsp; Dismiss</button>
+  </div>
+</div>
+
+<!-- Tesseract OCR -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<script>
+  /* ── Hidden code database ── */
+  const CODE_DB = {
+    "JK56": {
+      title: "Jumping Jacks Challenge",
+      instructions: [
+        "Do jumping jacks every single day.",
+        "Complete at least 300 jumping jacks per day.",
+        "No rest days — stay consistent!"
+      ]
+    },
+    "XZ11": {
+      title: "Push-Up Challenge",
+      instructions: [
+        "Complete 100 push-ups every day.",
+        "Absolutely no skips allowed.",
+        "Stay disciplined and track your streak!"
+      ]
+    }
+  };
+
+  /* ── Element refs ── */
+  const video             = document.getElementById('video');
+  const snapshotImg       = document.getElementById('snapshot');
+  const placeholder       = document.getElementById('placeholder');
+  const scannerBox        = document.getElementById('scannerBox');
+  const scannerWrap       = document.getElementById('scannerWrap');
+  const statusEl          = document.getElementById('status');
+  const btnStart          = document.getElementById('btnStart');
+  const btnCapture        = document.getElementById('btnCapture');
+  const btnRetry          = document.getElementById('btnRetry');
+  const processingOverlay = document.getElementById('processingOverlay');
+  const modalOverlay      = document.getElementById('modalOverlay');
+
+  let stream = null;
+
+  /* ── 1. Open camera ── */
+  async function startScanner() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width:  { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+
+      video.srcObject = stream;
+      video.style.display    = 'block';
+      placeholder.style.display  = 'none';
+      snapshotImg.style.display  = 'none';
+      scannerBox.classList.add('scanning');
+
+      btnStart.style.display   = 'none';
+      btnCapture.style.display = 'inline-block';
+      btnRetry.style.display   = 'none';
+
+      setStatus('POINT AT YOUR CODE — PRESS DONE WHEN READY', 'active');
+    } catch (err) {
+      setStatus('CAMERA ACCESS DENIED', 'error');
+      alert('Please allow camera access in your browser settings and try again.');
+    }
+  }
+
+  /* ── 2. Capture frame and run OCR ── */
+  function captureAndScan() {
+    if (!stream) return;
+
+    /* Draw the current video frame onto a hidden canvas */
+    const canvas = document.createElement('canvas');
+    canvas.width  = video.videoWidth  || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    /* Freeze display */
+    snapshotImg.src            = canvas.toDataURL('image/png');
+    snapshotImg.style.display  = 'block';
+    video.style.display        = 'none';
+    scannerBox.classList.remove('scanning');
+
+    /* Stop the camera stream */
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+
+    /* Show spinner */
+    btnCapture.style.display = 'none';
+    processingOverlay.classList.add('show');
+    setStatus('READING CODE…', 'processing');
+
+    /* Pre-process for better OCR accuracy:
+       greyscale + high contrast + slight brightness boost */
+    const proc = document.createElement('canvas');
+    proc.width  = canvas.width;
+    proc.height = canvas.height;
+    const pCtx = proc.getContext('2d');
+    pCtx.filter = 'grayscale(1) contrast(3) brightness(1.15)';
+    pCtx.drawImage(canvas, 0, 0);
+
+    /* Run Tesseract */
+    Tesseract.recognize(proc, 'eng', {
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+      tessedit_pageseg_mode: '11'   /* sparse text — finds isolated strings */
+    })
+    .then(({ data: { text } }) => {
+      processingOverlay.classList.remove('show');
+
+      const cleaned = text.replace(/\s+/g, '').toUpperCase();
+      console.log('OCR raw output :', text);
+      console.log('OCR cleaned    :', cleaned);
+
+      const match = findCode(cleaned);
+
+      if (match) {
+        showPulseRing();
+        setStatus('CODE DETECTED: ' + match, 'detected');
+        showModal(match);
+      } else {
+        setStatus('NO CODE FOUND — PLEASE RETRY', 'error');
+        btnRetry.style.display = 'inline-block';
+      }
+    })
+    .catch(() => {
+      processingOverlay.classList.remove('show');
+      setStatus('SCAN FAILED — PLEASE RETRY', 'error');
+      btnRetry.style.display = 'inline-block';
+    });
+  }
+
+  /* ── Code matching with 1-char fuzzy tolerance ── */
+  function findCode(text) {
+    /* Exact match first */
+    for (const code of Object.keys(CODE_DB)) {
+      if (text.includes(code)) return code;
+    }
+    /* Fuzzy: slide a window equal to each code's length, allow 1 diff */
+    for (const code of Object.keys(CODE_DB)) {
+      for (let i = 0; i <= text.length - code.length; i++) {
+        const slice = text.substring(i, i + code.length);
+        let diffs = 0;
+        for (let j = 0; j < code.length; j++) {
+          if (slice[j] !== code[j]) diffs++;
+          if (diffs > 1) break;
+        }
+        if (diffs <= 1) return code;
+      }
+    }
+    return null;
+  }
+
+  /* ── Reset back to start ── */
+  function resetScanner() {
+    snapshotImg.style.display = 'none';
+    snapshotImg.src           = '';
+    placeholder.style.display = 'flex';
+    btnRetry.style.display    = 'none';
+    btnStart.style.display    = 'inline-block';
+    setStatus('AWAITING ACTIVATION', '');
+  }
+
+  /* ── Modal helpers ── */
+  function showModal(code) {
+    const entry = CODE_DB[code];
+    document.getElementById('modalBadge').textContent = code;
+    document.getElementById('modalTitle').textContent = entry.title;
+
+    const ul = document.getElementById('modalInstructions');
+    ul.innerHTML = '';
+    entry.instructions.forEach(line => {
+      const li = document.createElement('li');
+      li.textContent = line;
+      ul.appendChild(li);
+    });
+
+    modalOverlay.classList.add('show');
+  }
+
+  function closeModal() {
+    modalOverlay.classList.remove('show');
+    resetScanner();
+  }
+
+  /* Close modal when clicking outside the card */
+  modalOverlay.addEventListener('click', function(e) {
+    if (e.target === modalOverlay) closeModal();
+  });
+
+  /* ── Status helper ── */
+  function setStatus(msg, cls) {
+    statusEl.textContent = msg;
+    statusEl.className   = 'status' + (cls ? ' ' + cls : '');
+  }
+
+  /* ── Pulse ring on detection ── */
+  function showPulseRing() {
+    const ring = document.createElement('div');
+    ring.className = 'pulse-ring';
+    scannerWrap.appendChild(ring);
+    setTimeout(() => ring.remove(), 700);
+  }
+</script>
+</body>
+</html>
+```
